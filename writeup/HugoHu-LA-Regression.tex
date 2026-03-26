@@ -1,0 +1,200 @@
+
+\documentclass[12pt]{article}
+
+\usepackage[hyperfootnotes=false]{hyperref}
+
+\makeatletter
+\renewcommand\@makefnmark{%
+  \hbox{\textsuperscript{\textcolor{blue}{\@thefnmark}}}%
+}
+\renewcommand\@makefntext[1]{%
+  \parindent 1em\noindent
+  \hbox{\textsuperscript{\@thefnmark}} #1%
+}
+\makeatother
+
+\usepackage[margin=0.85in,footskip=0.25in]{geometry}
+\newcommand*\dif{\mathop{}\!\textnormal{\slshape d}}
+
+
+\usepackage{tcolorbox}
+\usepackage{physics}
+\usepackage{amsfonts}
+\usepackage{lipsum}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{multirow}
+
+\usepackage{xcolor} 
+\definecolor{grey}{rgb}{0.9,0.9,0.9}
+\renewcommand{\baselinestretch}{1.2} 
+
+\usepackage[scaled]{helvet}
+\usepackage[T1]{fontenc}
+
+\usepackage{subcaption}
+\usepackage{graphicx, float}
+\usepackage{wrapfig}
+\usepackage{caption}
+\usepackage{hyperref}
+\usepackage{relsize}
+
+\usepackage{asymptote}
+\setlength{\parindent}{0pt}
+
+\usepackage{mdframed}
+\newmdenv[
+  linecolor=black,
+  linewidth=1pt,
+  topline=false,
+  bottomline=false,
+  rightline=false,
+  innertopmargin=0.5\baselineskip,
+  innerbottommargin=0.5\baselineskip,
+  innerleftmargin=10pt
+]{problem}
+
+\newcommand{\dxdt}{\frac{dx}{dt} }
+\newcommand{\half}{\frac{1}{2}}
+\newcommand{\cell}[2][1.25cm]{\makebox[#1]{\ensuremath{#2}}}
+\newcommand{\scell}[2][1cm]{\makebox[#1]{\ensuremath{#2}}}
+\newcommand{\rtwo}{\mathbb{R}^2}
+\newcommand{\rthree}{\mathbb{R}^3}
+
+
+\newcommand{\vect}[1]{\begingroup\renewcommand{\arraystretch}{0.5}\mathbf{#1}\endgroup}
+
+
+\usepackage{xstring}
+\newif\ifhasneg
+
+\newcommand{\realtwovector}[2]{%
+  \begingroup
+  \renewcommand{\arraystretch}{0.75}%
+  \hasnegfalse
+  \IfBeginWith{#1}{-}{\hasnegtrue}{}%
+  \IfBeginWith{#2}{-}{\hasnegtrue}{}%
+  \ifhasneg
+    \begin{bmatrix}
+      \IfBeginWith{#1}{-}{#1}{\phantom{-}#1} \\[0pt]
+      \IfBeginWith{#2}{-}{#2}{\phantom{-}#2}
+    \end{bmatrix}%
+  \else
+    \begin{bmatrix}#1 \\ #2 \end{bmatrix}%
+  \fi
+  \endgroup
+}
+
+\newcommand{\realthreevector}[3]{%
+  \begingroup
+  \renewcommand{\arraystretch}{0.4}%
+  \begin{bmatrix*}[r]
+    \scriptstyle #1 \\[2pt]
+    \scriptstyle #2 \\[2pt]
+    \scriptstyle #3
+  \end{bmatrix*}%
+  \endgroup
+}
+\newcommand{\vmag}[1]{\left\lVert \vect{#1} \right\rVert}
+\newcommand{\proj}[2]{\text{proj}_{\vect{#1}} \vect{#2}}
+
+\date{March 27, 2026}
+% \date{November 10, 2025\\ \small Revised: November 24, 2025}
+\title{%
+  LA Assessment - Least Squares Approximation 
+}
+\author{Hugo Hu}
+
+\begin{document}
+\maketitle
+
+\section*{Problem}
+
+Yellow cab fares in NYC are usually metered, not flat-fare. Could we use historical trip records to build a regression
+model to predict fares for future rides?
+
+\section*{Data and Technical Information}
+The NYC Taxi and Limousine Commission provides trip record data recording information about every taxi trip made in the city. These datasets are available for each month, located 
+at\\ \url{https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page}. \\
+
+As a training set, I used twelve months of data (December 2024 to November 2025), randomly selecting half of all entries for inclusion. Of these trips, 
+fixed-fare and other special rate trips were excluded, leaving a total of over 17 million rows. \\
+
+The regression model uses information like the time of day, day of week, the month, and the start and end zones, as a part of its "known data" matrix. 
+But not all data available is used, because we only wish to consider pieces of information that can be reasonably identified before beginning a trip. For example,
+a rider would not know the total distance driven, nor total time in transit, before starting. 
+\\
+
+\newpage
+\section*{One-Hot Encoding and Dependency}
+In a linear regression, we work with numbers. Unfortunately, not everything can be easily encoded as a number! For example, consider the challenge of encoding
+a month as a number: it seems simple to designate January through December as $1$ through $12$.\\
+
+But this isn't really the case! Months do not exist on a line (more so a circle, it could be argued). The fix for this is "one-hot encoding". Instead of creating
+a single column to populate with an encoded month value, we create $12$ columns each representing a month. Almost like a boolean datatype, we use $1$ or $0$ to 
+represent whether it is that month. \\
+
+For example, to represent December in this encoding, we'd have: $\left\{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1\right\}$. \\
+
+But knowing that we'll find inverses later, it seems like this technique has a flaw that creates possible dependency. In the encoding above, isn't it true that we
+only need $11$ pieces of information to represent all $12$ states?\\
+
+If we knew that it wasn't January through November, we'd conclude that it must then be December. 
+To avoid this dependency, otherwise known as a "dummy variable", we will deliberately drop a column from each feature (month, time of day, day of week, etc). \\
+
+\section*{Linear Algebra Setup}
+Our problem is simple: solve for vector $\vect{w}$ in $X \vect{w} = \vect{y}$. \\
+
+$X$ is the data matrix, and for each ride, includes the following information:
+\begin{itemize}
+    \item Pickup Zone (262)
+    \item Drop-off Zone (262)
+    \item Pickup Hour (24)
+    \item Day of Week (7)
+    \item Month (12)
+\end{itemize}
+
+\newpage
+
+After hot-encoding and dropping a column, our matrix looks roughly like: \\
+\begin{tabular}{|p{2.5cm}||p{2.5cm}|p{2.5cm}|p{2.5cm}|p{2.5cm}|p{2.5cm}|}
+\hline
+\multicolumn{6}{|c|}{Matrix $X$ of size 17M x 561} \\
+\hline
+Ride Data \# & Pickup Zone (261) & Drop-off Zone (261) & Pickup Hour (23) & Day of Week (6) & Pickup Month (11) \\
+\hline
+Ride 1 & one-hot & one-hot & one-hot & one-hot & one-hot \\
+\hline
+Ride 2 & one-hot & one-hot & one-hot & one-hot & one-hot \\
+\hline
+... & ... & ... & ... & ... & ... \\
+\hline
+Ride 17M & one-hot & one-hot & one-hot & one-hot & one-hot \\
+\hline
+\end{tabular} \newline\newline
+
+
+
+Our vector $\vect{y}$ is a vertical $17$M x $1$ vector, where each element corresponds to the pre-tip fare of that associated ride. This is the data we'd like 
+to be able to infer.\\
+
+Lastly, $\vect{w}$ is the coefficient vector of size $561$ x $1$. We are looking to find $\vect{w}$. \\
+
+\section*{Workthrough}
+Though these computations were performed in numpy, the following work is equivalent to what was implemented in code. \\
+
+We begin with:\\
+$X\vect{w} = \vect{y}$ \\
+We know that $X$ is not a square matrix, and thus, we cannot find its matrix. Let's change that!\\
+
+$X^T X \vect{w} = X^T \vect{y}$ \\
+For any matrix $M$, $M^TM$ is a square matrix (with an inverse), so $X^TX$ has an inverse.\\
+
+$(X^T X)^{-1} (X^T X) \vect{w} = (X^T X)^{-1} (X^T) \vect{y}$\\
+
+$\vect{w} = (X^TX)^{-1} (X^T) \vect{y}$. 
+
+\newpage
+\section*()
+\end{document}
