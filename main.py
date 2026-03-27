@@ -4,7 +4,7 @@ import numpy as np
 # adjust this number to modify what % of each dataset to use.
 # intermediate X matrix, at samplesize = 0.5 requires 70GB+
 # reduce this number when RAM is limited
-SAMPLE_SIZE = 0.5
+SAMPLE_SIZE = 0.05
 
 
 def create_np_data():
@@ -96,14 +96,15 @@ def create_np_data():
     print(f"Shape of X: {X.shape}")
     print(f"Shape of y: {y.shape}")
 
-    XTX = X.T @ X
-    XTy = X.T @ y
-    w = np.linalg.solve(XTX, XTy)
+    w = np.linalg.inv(X.T @ X) @ X.T @ y
 
     np.save("W_vector.npy", w)
 
-    print(f"Gram Matrix Rank: {np.linalg.matrix_rank(XTX)}")
+    # print(f"Gram Matrix Rank: {np.linalg.matrix_rank(XTX)}")
     print(f"w vector shape: {w.shape}")
+
+    w_np, *_ = np.linalg.lstsq(X, y, rcond=None)
+    print(f"Numpy Check (Verfication): {np.allclose(w, w_np)}")
 
 
 def validate_model(test_file):
@@ -161,8 +162,13 @@ def validate_model(test_file):
 
     # mean absolute error
     mae = np.mean(np.abs(y_actual - y_pred))
+
+    # mean squared error (MSE)
+    mse = np.mean((y_actual - y_pred) ** 2)
+
     # residual sum of squares
     ss_res = np.sum((y_actual - y_pred) ** 2)
+
     # total sum of squares
     ss_tot = np.sum((y_actual - np.mean(y_actual)) ** 2)
 
@@ -170,9 +176,78 @@ def validate_model(test_file):
 
     print(f"\nresults for {test_file}")
     print(f"mean absolute error (MAE): ${mae:.2f}")
+    print(f"mean squared error (MSE): {mse:.2f}")
     print(f"R-squared (R^2): {r2:.4f}")
 
 
-create_np_data()
+def predict_fare(pu_id, do_id, pickup_hour, day_of_week, month):
+    import numpy as np
+    import pandas as pd
 
-validate_model("test/yellow_tripdata_2024-05.parquet")
+    # load training column structure
+    train_pu_cols = pd.read_csv("cols_pu.csv", header=None).iloc[:, 0].tolist()
+    train_do_cols = pd.read_csv("cols_do.csv", header=None).iloc[:, 0].tolist()
+    train_h_cols = pd.read_csv("cols_h.csv", header=None).iloc[:, 0].tolist()
+    train_dow_cols = pd.read_csv("cols_dow.csv", header=None).iloc[:, 0].tolist()
+    train_month_cols = pd.read_csv("cols_month.csv", header=None).iloc[:, 0].tolist()
+
+    # load weights
+    w = np.load("W_vector.npy")
+
+    # create single-row df
+    df = pd.DataFrame(
+        {
+            "PULocationID": [pu_id],
+            "DOLocationID": [do_id],
+            "pickup_hour": [pickup_hour],
+            "day_of_week": [day_of_week],
+            "month": [month],
+        }
+    )
+
+    # one-hot encode, align cols w/ pandas csvs
+    pu_dummies = pd.get_dummies(df["PULocationID"], prefix="PU").reindex(
+        columns=train_pu_cols, fill_value=0
+    )
+    do_dummies = pd.get_dummies(df["DOLocationID"], prefix="DO").reindex(
+        columns=train_do_cols, fill_value=0
+    )
+    hour_dummies = pd.get_dummies(df["pickup_hour"], prefix="H").reindex(
+        columns=train_h_cols, fill_value=0
+    )
+    dow_dummies = pd.get_dummies(df["day_of_week"], prefix="DOW").reindex(
+        columns=train_dow_cols, fill_value=0
+    )
+    month_dummies = pd.get_dummies(df["month"], prefix="MONTH").reindex(
+        columns=train_month_cols, fill_value=0
+    )
+
+    # build single feature vector
+    X = np.hstack(
+        [
+            pu_dummies.values,
+            do_dummies.values,
+            hour_dummies.values,
+            dow_dummies.values,
+            month_dummies.values,
+        ]
+    ).astype(float)
+
+    # prediction
+    y_pred = X @ w
+
+    return float(y_pred[0])
+
+
+# create_np_data()
+
+# validate_model("test/yellow_tripdata_2024-05.parquet")
+
+# print(predict_fare(202, 145, 23, 2, 3))
+# A trip from R.I. to Gantry Plaza S.P. at 11PM on a Wednesday in March, predicted to be $23 in fare
+
+print(predict_fare(202, 13, 20, 3, 3))
+# A trip from R.I. to TriBeCa at 8PM on a Thursday in March, predicted to be $18.90 in fare (actual: $60)
+
+print(predict_fare(202, 145, 20, 3, 3))
+# A trip from R.I. to TriBeCa at 8PM on a Thursday in March, predicted to be $18.29 in fare (actual: $17.93)

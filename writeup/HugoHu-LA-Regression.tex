@@ -193,8 +193,30 @@ For any matrix $M$, $M^TM$ is a square matrix (with an inverse), so $X^TX$ has a
 
 $(X^T X)^{-1} (X^T X) \vect{w} = (X^T X)^{-1} (X^T) \vect{y}$\\
 
-$\vect{w} = (X^TX)^{-1} (X^T) \vect{y}$. 
+$\boxed{\vect{w} = (X^TX)^{-1} (X^T) \vect{y}}$. 
 
-\newpage
-\section*()
+\section*{Code Demonstration}
+A GitHub repository containing working code (in main.py) can be found at \url{https://github.com/Hugoyhu/LinAlg-Taxicab-Regression}.
+
+\section*{Verification and Interpretation}
+A verification of the matrix produced by following the steps above was implemented in-code with the numpy package's built-in \textit{np.linalg.lstsq()} function,
+which finds the least-squares solution to a linear matrix equation. Accuracy was verified on a smaller input dataset (2.4M x 546). \\
+
+The regression model was validated with a single-month trip dataset that was not included in the data matrix $X$. The model achieves a mean absolute error of $\$6.60$ 
+with an $R^2$ error of $0.50$. \\
+
+So what does an $R^2$ error of $0.50$ indicate? Consider the Mean Squared Error (MSE) if we were to guess the mean fare for every ride. $R^2 = 0.5$ suggests that
+the regression model's inferences produce an MSE that's half as large as guessing, which means that though it's certainly an improvement over guessing the mean, 
+it's also not very accurate, especially considering the large mean absolute error. \\
+
+And as to vector $\vect{w}$, it's like a vector of weights, or in other words, how significant each piece of data available for a certain ride is, in relation to 
+the resulting fare price. We can now use $\vect{w}$ to predict future ride fares. Imagine if we took the information we had (time of day, day of week, etc) and
+encoded it into the same format as $\vect{w}$. If we dotted the two vectors, we'd end up with the predicted fare price. \\
+
+Unfortunately, it doesn't work very reliably. \\
+
+For a trip from Roosevelt Island to Long Island City ($\$17.93$), the regression model predicted $\$18.29$.\\
+For a trip from Roosevelt Island to Stuyvesant H.S.  ($\$60.43$), the regression model predicted $\$18.90$. \\
+
+"Accurate" data for these two examples used Uber's proprietary taxicab fare algorithm. 
 \end{document}
